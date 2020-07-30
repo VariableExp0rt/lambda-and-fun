@@ -1,0 +1,66 @@
+//This file contains the code that has been built and made into a deployment package
+//GOOS=linux go build -o main
+//zip deployment.zip main 
+
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"log"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/eks"
+)
+
+var (
+	// DefaultHTTPGetAddress Default Address
+	DefaultHTTPGetAddress = "https://checkip.amazonaws.com"
+
+	// ErrNoIP No IP found in response
+	ErrNoIP = errors.New("No IP in HTTP response")
+
+	// ErrNon200Response non 200 status code in response
+	ErrNon200Response = errors.New("Non 200 Response found")
+)
+
+//Actions is a struct to hold the operation requested by the end user through the API GW
+type Actions struct {
+	operation string
+	name      string
+}
+
+func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+
+	var action Actions
+
+	json.Unmarshal([]byte(request.Body), &action)
+	log.Printf("Received request, processing action: %v", action.operation)
+
+	sess := session.Must(session.NewSessionWithOptions(session.Options{Config: aws.Config{Region: aws.String("eu-west-2")}}))
+	svc := eks.New(sess)
+
+	switch action.operation {
+	case "create":
+		cluster, err := svc.CreateCluster(&eks.CreateClusterInput{})
+		if err != nil {
+			log.Printf("Unable to create cluster %v: %v", cluster, err)
+		}
+
+	case "delete":
+		cluster, err := svc.DeleteCluster(&eks.DeleteClusterInput{})
+		if err != nil {
+			log.Printf("Unable to delete cluster %v: %v", cluster, err)
+		}
+	}
+
+	return events.APIGatewayProxyResponse{StatusCode: 200}, ErrNon200Response
+
+}
+
+func main() {
+	lambda.Start(handler)
+}
