@@ -18,33 +18,12 @@ import (
 // Below is a quick reference to the refactoring work that needs to be done to this code in order to move some of the functionality out of
 // main and make it more efficient
 
-//type Services struct {
-//	session *session.Session
-//	lambda  *lambda.Lambda
-//	iam		*iam.IAM
-//  apigw 	*apigateway.APIGateway
-//}
-
-//func (s *Services) test() {
-//	sess := session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable, Config: aws.Config{Region: aws.String("eu-west-2")}}))
-//}
-
-//func (s *Services) createRole(name string)
-
-//func (s *Services) assignPolicyToRole(p string...) {
-//	for i, policy := range p {
-//policy = aws.String(policy)
-//iam.AssignRolePolicy(&iam.AttachRolePolicyInput{})
-//}
-//}
-
-//func (s *Services)
-
 var (
-	fileVar string
-	region  = &rPtr
-	rPtr    = "eu-west-2"
-	account *string
+	fileVar      string
+	region       = &rPtr
+	rPtr         = "eu-west-2"
+	account      *string
+	policyPrefix = "arn:aws:iam::aws:policy/service-role/"
 )
 
 //Marshal the file contents into a slice of Byte
