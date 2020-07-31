@@ -15,15 +15,36 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
-//Be sure to remove these if they aren't needed
-var (
-	fileVar, ACC string
-	region       = &rPtr
-	rPtr         = "eu-west-2"
-	account      = &aPtr
+// Below is a quick reference to the refactoring work that needs to be done to this code in order to move some of the functionality out of
+// main and make it more efficient
 
-	//Set account ID variable instead, safer
-	aPtr = os.Getenv(ACC)
+//type Services struct {
+//	session *session.Session
+//	lambda  *lambda.Lambda
+//	iam		*iam.IAM
+//  apigw 	*apigateway.APIGateway
+//}
+
+//func (s *Services) test() {
+//	sess := session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable, Config: aws.Config{Region: aws.String("eu-west-2")}}))
+//}
+
+//func (s *Services) createRole(name string)
+
+//func (s *Services) assignPolicyToRole(p string...) {
+//	for i, policy := range p {
+//policy = aws.String(policy)
+//iam.AssignRolePolicy(&iam.AttachRolePolicyInput{})
+//}
+//}
+
+//func (s *Services)
+
+var (
+	fileVar string
+	region  = &rPtr
+	rPtr    = "eu-west-2"
+	account *string
 )
 
 //Marshal the file contents into a slice of Byte
@@ -56,6 +77,11 @@ func main() {
 	flag.StringVar(&fileVar, "-file-path", "", "Path to deployment package (zip file)")
 	//flag.StringVar(&runtime, "runtime", "go1.x", "Specify runtime for Lambda, default is go1.x.")
 	flag.Parse()
+
+	//Add this to remove some of the globally declared variables
+	if envVar, res := os.LookupEnv("ACCOUNT"); res != false {
+		account = &envVar
+	}
 
 	RoleName := "Amazon-Lambda-EKS-Role"
 
@@ -298,5 +324,5 @@ func main() {
 		fmt.Printf("Error invoking test of method on API Gateway: %v", err)
 	}
 
-	fmt.Println("Successfully deployed API Gateway and tested with the following response: ", testResult.Body)
+	fmt.Println("Successfully deployed API Gateway and tested with the following status code: ", testResult.Status)
 }
