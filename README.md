@@ -4,7 +4,7 @@ This idea was initially just to identify how I might start using the new Serverl
 
 `go build -o main main.go`
 
-`export ACC="Account ID"`
+`export ACCOUNT="Account ID"`
 
 `./main --file-path="deployment.zip"`
 
