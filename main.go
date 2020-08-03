@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -19,11 +20,12 @@ import (
 // main and make it more efficient
 
 var (
-	fileVar      string
-	region       = &rPtr
-	rPtr         = "eu-west-2"
-	account      *string
-	policyPrefix = "arn:aws:iam::aws:policy/service-role/"
+	fileVar            string
+	region             = &rPtr
+	rPtr               = "eu-west-2"
+	account            *string
+	policyPrefixLambda = "arn:aws:iam::aws:policy/service-role/"
+	policyPrefix       = "arn:aws:iam::aws:policy/"
 )
 
 //Marshal the file contents into a slice of Byte
@@ -35,7 +37,7 @@ func getDeploymentPackage() []byte {
 	}
 
 	ext := filepath.Ext(fileVar)
-	if ext != "zip" {
+	if ext != ".zip" {
 		fmt.Printf("Must supply deployment package as zip: %v", ext)
 		os.Exit(1)
 	}
@@ -53,19 +55,27 @@ func getDeploymentPackage() []byte {
 func main() {
 	// arguments to be passed to the commandline when invoking the program
 	// TODO
-	flag.StringVar(&fileVar, "-file-path", "", "Path to deployment package (zip file)")
+	var RoleName string
+
+	flag.StringVar(&fileVar, "file-path", "", "Path to deployment package (zip file)")
+	flag.StringVar(&RoleName, "role-name", "", "Name of the new role to create")
+	flag.Bool("skip-role-creation", false, "Use this flag to skip role creation if you have an existing role")
 	//flag.StringVar(&runtime, "runtime", "go1.x", "Specify runtime for Lambda, default is go1.x.")
 	flag.Parse()
+
+	//TODO: also a switch that exits if required flag is missing
 
 	//Add this to remove some of the globally declared variables
 	if envVar, res := os.LookupEnv("ACCOUNT"); res != false {
 		account = &envVar
+	} else if res == false {
+		fmt.Println("must set account ID environment variable before proceeding")
+		os.Exit(1)
 	}
 
-	RoleName := "Amazon-Lambda-EKS-Role"
-
-	if len(os.Args) == 2 {
-		RoleName = os.Args[1]
+	//TODO: Change this, add a CLI flag and if not null string, execute the create role, otherwise, add flag for attach role
+	if RoleName == "" {
+		RoleName = "default-role" + time.Now().UTC().Format(time.UnixDate)
 	}
 	// Every interaction with the AWS SDK requires a session, this just establishes a basic session
 	// to be able to pass to the services we want to interact with
@@ -86,6 +96,8 @@ func main() {
 	//CreateRole will create a new managed IAM Role, and can only have one managed policy attached to
 	//it in the above configuration. Multiple can be assigned by calling AttachRolePolicy as many
 	//times as needed
+
+	//TODO: switch statement using above skip role creation var as case
 	resp, err := svc.CreateRole(params)
 	if err != nil {
 		fmt.Println(err.Error(), resp)
@@ -128,27 +140,25 @@ func main() {
 	lmdsvc := lambda.New(sess)
 
 	var FuncName = "my-example-function"
-	if len(os.Args) == 2 {
-		FuncName = os.Args[2]
-	}
 
 	//Generate the Function Input
 	funcParams := &lambda.CreateFunctionInput{
 		Code:         &lambda.FunctionCode{ZipFile: pkg},
 		Description:  aws.String("This function manages the creation and deletion of Amazon EKS Clusters"),
 		FunctionName: aws.String(FuncName),
-		Role:         &RoleName,
+		Handler:      aws.String("main"),
+		Role:         aws.String(RoleName),
 		Runtime:      aws.String("go1.x"),
 	}
 
 	//Create the function and wait until it exists before trying to create the API Gateway resource for it
 	resp2, err := lmdsvc.CreateFunction(funcParams)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Printf("Error creating function: %v", err)
 	}
 
 	if err := lmdsvc.WaitUntilFunctionActive(&lambda.GetFunctionConfigurationInput{
-		FunctionName: &FuncName,
+		FunctionName: aws.String(FuncName),
 	}); err != nil {
 		fmt.Println(err.Error(), resp2)
 	}
@@ -256,12 +266,16 @@ func main() {
 		fmt.Printf("Error deploying newly created API %v: %v", deploy, err)
 	}
 
-	var REGION, API, ACCOUNT string
-	os.Setenv(REGION, *region)
-	os.Setenv(API, *api)
-	os.Setenv(ACCOUNT, *account)
+	// Could really do with wrapping this into a variadic function because it looks untidy
+	var (
+		REGION     = *region + ":"
+		ACCOUNT    = *account + ":"
+		API        = *api
+		pathPrefix = "arn:aws:execute-api:"
+		pathSuffix = "/*/POST/EKS-Setup"
+	)
 
-	sArn := "arn:aws:execute-api:$REGION:$ACCOUNT:$API/*/POST/EKS-Setup"
+	sArn := pathPrefix + REGION + ACCOUNT + API + pathSuffix
 
 	perms, err := lmdsvc.AddPermission(&lambda.AddPermissionInput{
 		FunctionName: &FuncName,
@@ -282,15 +296,6 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error adding permission to API Gateway %v: %v", perms1, err)
 	}
-
-	//var json = []byte(`{"operation": "create"}`)
-	//result, err := http.Post(`https://$API.execute-api.$REGION.amazonaws.com/prod/EKS-Setup`, "application/json", bytes.NewBuffer(json))
-
-	//if result.StatusCode == 200 {
-	//	fmt.Println("Successfully made request to API Gateway:", result)
-	//} else if result.StatusCode != 200 {
-	//	fmt.Printf("Error making request to API Gateway: %v", err)
-	//}
 
 	testResult, err := apigwsvc.TestInvokeMethod(&apigateway.TestInvokeMethodInput{
 		Body:                aws.String(`{"operation": "create"}`),
