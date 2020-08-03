@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -27,30 +26,6 @@ var (
 	policyPrefixLambda = "arn:aws:iam::aws:policy/service-role/"
 	policyPrefix       = "arn:aws:iam::aws:policy/"
 )
-
-//Marshal the file contents into a slice of Byte
-func getDeploymentPackage() []byte {
-
-	file, err := os.Open(fileVar)
-	if err != nil {
-		fmt.Printf("Error reading file: %v", file)
-	}
-
-	ext := filepath.Ext(fileVar)
-	if ext != ".zip" {
-		fmt.Printf("Must supply deployment package as zip: %v", ext)
-		os.Exit(1)
-	}
-
-	scanner := bufio.NewScanner(file)
-
-	if !scanner.Scan() {
-		log.Printf("Error reading from scanner: %v", scanner.Err())
-		return nil
-	}
-	obj := scanner.Bytes()
-	return obj
-}
 
 func main() {
 	// arguments to be passed to the commandline when invoking the program
@@ -89,7 +64,6 @@ func main() {
 	params := &iam.CreateRoleInput{
 		AssumeRolePolicyDocument: aws.String("{\"Version\": \"2012-10-17\",\"Statement\": [{\"Effect\": \"Allow\",\"Principal\": {\"Service\": \"lambda.amazonaws.com\"},\"Action\": \"sts:AssumeRole\"}]}"),
 		Description:              aws.String("A Role to allow Lambda to perform it's basic functions and interact with EKS"),
-		PermissionsBoundary:      aws.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 		RoleName:                 aws.String(RoleName),
 	}
 
@@ -100,7 +74,7 @@ func main() {
 	//TODO: switch statement using above skip role creation var as case
 	resp, err := svc.CreateRole(params)
 	if err != nil {
-		fmt.Println(err.Error(), resp)
+		log.Printf("Error creating role: %v", err)
 	}
 
 	//Wait until the Role exists before attaching new policies, which would otherwise fail
@@ -134,8 +108,19 @@ func main() {
 
 	fmt.Println("Successfully attached policy to Role", res1)
 
-	//Quickly call the function to get the deployment package
-	pkg := getDeploymentPackage()
+	res2, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
+		PolicyArn: aws.String("arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"),
+		RoleName:  aws.String(RoleName),
+	})
+	if err != nil {
+		log.Printf("Error attaching policy to role: %v\nResult: %v", err, res2)
+	}
+
+	// This is easier than putting into a function, as I had before!
+	pkg, err := ioutil.ReadFile("/Users/LiamBakerCS/go/src/lambda-and-fun/deployment.zip")
+	if err != nil {
+		log.Panicf("Will not create function, deployment package cannot be read: %v", err)
+	}
 
 	lmdsvc := lambda.New(sess)
 
@@ -147,7 +132,7 @@ func main() {
 		Description:  aws.String("This function manages the creation and deletion of Amazon EKS Clusters"),
 		FunctionName: aws.String(FuncName),
 		Handler:      aws.String("main"),
-		Role:         aws.String(RoleName),
+		Role:         aws.String(*resp.Role.Arn),
 		Runtime:      aws.String("go1.x"),
 	}
 
@@ -163,7 +148,7 @@ func main() {
 		fmt.Println(err.Error(), resp2)
 	}
 
-	fmt.Println("Function was created successfully and is currently active", FuncName)
+	fmt.Println("Function was created successfully and is currently active: ", FuncName)
 
 	// A helper for referencing within the API Gateway PutIntegration below
 	function, err := lmdsvc.GetFunctionConfiguration(&lambda.GetFunctionConfigurationInput{FunctionName: aws.String(FuncName)})
@@ -176,29 +161,31 @@ func main() {
 		Name: aws.String("EKS-Setup"),
 	})
 	if err != nil {
-		fmt.Println("Error creating REST API")
+		log.Printf("Error creating REST API: %v", err)
 	}
 
 	//Grab the ID of the newly created REST API, this is needed below to find the root object id
 	api := resp3.Id
 
 	//add logic to get the root path or parent ID
-	parentAPI, err := apigwsvc.GetResource(&apigateway.GetResourceInput{RestApiId: aws.String(*api)})
+	parentAPI, err := apigwsvc.GetResources(&apigateway.GetResourcesInput{RestApiId: api})
 	if err != nil {
-		fmt.Printf("Unable to get parent REST API ID: %v", err)
+		log.Printf("Unable to get parent REST API ID: %v", err)
 	}
+
+	var parentId = parentAPI.Items[0].ParentId
 
 	//Create the Resource on top of the above REST API
 	resource, err := apigwsvc.CreateResource(&apigateway.CreateResourceInput{
 		RestApiId: api,
 		PathPart:  resp3.Name,
-		ParentId:  parentAPI.ParentId,
+		ParentId:  parentId,
 	})
 	if err != nil {
 		fmt.Printf("Error assigning resource %v to API Gateway: %v", resource, resp3)
 	}
 
-	resourceID := resource.Id
+	resourceId := resource.Id
 
 	//PutMethod so that we are able to sent POST requests to the API Gateway to trigger
 	//the Lambda function
@@ -206,7 +193,7 @@ func main() {
 		AuthorizationType: aws.String("None"),
 		HttpMethod:        aws.String("POST"),
 		RestApiId:         api,
-		ResourceId:        resourceID,
+		ResourceId:        resourceId,
 	})
 	if err != nil {
 		fmt.Printf("Unable to create put method %v for resource %v", method, resource)
@@ -218,7 +205,7 @@ func main() {
 		HttpMethod:            aws.String("POST"),
 		IntegrationHttpMethod: aws.String("POST"),
 		RestApiId:             api,
-		ResourceId:            resourceID,
+		ResourceId:            resourceId,
 		Type:                  aws.String("AWS"),
 		Uri:                   aws.String(*function.FunctionArn),
 	})
@@ -236,7 +223,7 @@ func main() {
 	methodResp, err := apigwsvc.PutMethodResponse(&apigateway.PutMethodResponseInput{
 		HttpMethod:     aws.String("POST"),
 		RestApiId:      api,
-		ResourceId:     resourceID,
+		ResourceId:     resourceId,
 		ResponseModels: respModel,
 		StatusCode:     aws.String("200"),
 	})
@@ -250,7 +237,7 @@ func main() {
 	intResp, err := apigwsvc.PutIntegrationResponse(&apigateway.PutIntegrationResponseInput{
 		HttpMethod:        aws.String("POST"),
 		RestApiId:         api,
-		ResourceId:        resourceID,
+		ResourceId:        resourceId,
 		ResponseTemplates: respModel,
 		StatusCode:        aws.String("200"),
 	})
@@ -301,7 +288,7 @@ func main() {
 		Body:                aws.String(`{"operation": "create"}`),
 		HttpMethod:          aws.String("POST"),
 		PathWithQueryString: aws.String(""),
-		ResourceId:          resourceID,
+		ResourceId:          resourceId,
 		RestApiId:           api,
 	})
 	if err != nil || testResult.Status != aws.Int64(200) {
