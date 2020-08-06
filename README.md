@@ -26,3 +26,10 @@ type Libraries struct {
 ```
 
 Improve error handling and separate each creation of a resource into it's own function to give more flexbility on the CLI to skip role or other resource creation.
+
+Reference when going through setting up a Cluster via Lambda;
+
+[ ] eksctl.io
+[ ] [AWS EKS User Guide](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html)
+
+The idea is to have the cluster configuration in a separate package, and import into the Lambda to be used with 'CreateCluster'

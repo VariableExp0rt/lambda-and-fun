@@ -15,16 +15,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
-// Below is a quick reference to the refactoring work that needs to be done to this code in order to move some of the functionality out of
-// main and make it more efficient
-
 var (
-	fileVar            string
-	region             = &rPtr
-	rPtr               = "eu-west-2"
-	account            *string
-	policyPrefixLambda = "arn:aws:iam::aws:policy/service-role/"
-	policyPrefix       = "arn:aws:iam::aws:policy/"
+	fileVar string
+	region  = &rPtr
+	rPtr    = "eu-west-2"
+	account *string
 )
 
 func main() {
@@ -116,8 +111,14 @@ func main() {
 		log.Printf("Error attaching policy to role: %v\nResult: %v", err, res2)
 	}
 
+	//TODO: Create the policy document, then attach it to the Lambda role created above
+	svc.CreatePolicy(&iam.CreatePolicyInput{
+		PolicyDocument: aws.String(""),
+		PolicyName:     aws.String("AWSLambdaCreateStackPolicy"),
+	})
+
 	// This is easier than putting into a function, as I had before!
-	pkg, err := ioutil.ReadFile("/Users/LiamBakerCS/go/src/lambda-and-fun/deployment.zip")
+	pkg, err := ioutil.ReadFile(fileVar)
 	if err != nil {
 		log.Panicf("Will not create function, deployment package cannot be read: %v", err)
 	}
@@ -271,7 +272,7 @@ func main() {
 		SourceArn:    aws.String(sArn),
 	})
 	if err != nil {
-		fmt.Printf("Error adding permission to API Gateway %v: %v", perms, err)
+		fmt.Printf("Error adding permission to API Gateway %v: %v", perms.Statement, err)
 	}
 
 	perms1, err := lmdsvc.AddPermission(&lambda.AddPermissionInput{
@@ -281,7 +282,7 @@ func main() {
 		SourceArn:    aws.String(sArn),
 	})
 	if err != nil {
-		fmt.Printf("Error adding permission to API Gateway %v: %v", perms1, err)
+		fmt.Printf("Error adding permission to API Gateway %v: %v", perms1.Statement, err)
 	}
 
 	testResult, err := apigwsvc.TestInvokeMethod(&apigateway.TestInvokeMethodInput{

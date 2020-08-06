@@ -40,6 +40,9 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	json.Unmarshal([]byte(request.Body), &action)
 	log.Printf("Received request, processing action: %v", action.operation)
 
+
+	//TODO: This needs to be swapped with cloudformation CreateStack using the code worked on 
+	// for cloudformation/goformation
 	sess := session.Must(session.NewSessionWithOptions(session.Options{Config: aws.Config{Region: aws.String("eu-west-2")}}))
 	svc := eks.New(sess)
 
