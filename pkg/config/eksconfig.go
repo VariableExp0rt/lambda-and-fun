@@ -15,6 +15,9 @@ import (
 	"github.com/awslabs/goformation/v4/cloudformation/iam"
 )
 
+type Export struct {
+}
+
 var (
 	resource   = "ExampleCluster"
 	securityID = "test"
@@ -24,7 +27,7 @@ var (
 )
 
 //GetVPCInfo describe all available VPC's to our AWS account
-func GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
+func (e *Export) GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
 
 	svc := ec2.New(sess)
 
@@ -39,7 +42,7 @@ func GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
 }
 
 //CreateConfigurationTemplate crafts the CloudFormation teamplte to be executed by the Lambda function
-func CreateConfigurationTemplate() *cldfmt.Template {
+func (e *Export) CreateConfigurationTemplate() *cldfmt.Template {
 
 	template := cldfmt.NewTemplate()
 
