@@ -23,7 +23,8 @@ var (
 		SharedConfigState: session.SharedConfigEnable, Config: aws.Config{Region: aws.String("eu-west-2")}}))
 )
 
-func getVPCInfo() (*ec2.DescribeVpcsOutput, error) {
+//GetVPCInfo describe all available VPC's to our AWS account
+func GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
 
 	svc := ec2.New(sess)
 
@@ -37,7 +38,8 @@ func getVPCInfo() (*ec2.DescribeVpcsOutput, error) {
 	return vpc, err
 }
 
-func createConfigurationTemplate() *cldfmt.Template {
+//CreateConfigurationTemplate crafts the CloudFormation teamplte to be executed by the Lambda function
+func CreateConfigurationTemplate() *cldfmt.Template {
 
 	template := cldfmt.NewTemplate()
 
