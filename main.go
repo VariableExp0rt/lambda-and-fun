@@ -58,7 +58,7 @@ func main() {
 	//Create the config to be used below to CreateRole
 	params := &iam.CreateRoleInput{
 		AssumeRolePolicyDocument: aws.String("{\"Version\": \"2012-10-17\",\"Statement\": [{\"Effect\": \"Allow\",\"Principal\": {\"Service\": \"lambda.amazonaws.com\"},\"Action\": \"sts:AssumeRole\"}]}"),
-		Description:              aws.String("A Role to allow Lambda to perform it's basic functions and interact with EKS"),
+		Description:              aws.String("A Role to allow Lambda to perform it's basic functions and interact with CloudFormation"),
 		RoleName:                 aws.String(RoleName),
 	}
 
@@ -93,29 +93,37 @@ func main() {
 	fmt.Println("Successfully attached policy to Role", res)
 
 	//This is the primary policy we want the Lambda to be able to use when 'Assuming' the Role
+
 	res1, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-		PolicyArn: aws.String("arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"),
-		RoleName:  aws.String(RoleName),
-	})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
-	fmt.Println("Successfully attached policy to Role", res1)
-
-	res2, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
 		PolicyArn: aws.String("arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"),
 		RoleName:  aws.String(RoleName),
 	})
 	if err != nil {
-		log.Printf("Error attaching policy to role: %v\nResult: %v", err, res2)
+		log.Printf("Error attaching policy to role: %v\nResult: %v", err, res1)
 	}
 
 	//TODO: Create the policy document, then attach it to the Lambda role created above
-	svc.CreatePolicy(&iam.CreatePolicyInput{
-		PolicyDocument: aws.String(""),
+	res2, err := svc.CreatePolicy(&iam.CreatePolicyInput{
+		//TODO: Add policy document for CreateStack and DeleteStack actions for Cloudformation
+		PolicyDocument: aws.String("{\"Version\": \"2012-10-17\",\"Statement\": [{\"Sid\": \"VisualEditor0\",\"Effect\": \"Allow\",\"Action\": [\"cloudformation:CreateStack\",\"cloudformation:DeleteStack\"],\"Resource\": \"*\"}]}"),
 		PolicyName:     aws.String("AWSLambdaCreateStackPolicy"),
 	})
+	if err != nil {
+		fmt.Errorf("Error creating new custom policy for %v: %v", res2, err)
+	}
+
+	if err := svc.WaitUntilPolicyExists(&iam.GetPolicyInput{
+		PolicyArn: res2.Policy.Arn,
+	}); err != nil {
+		fmt.Printf("Error waiting for policy to be created: %v", err)
+	}
+
+	res3, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
+		PolicyArn: res2.Policy.Arn,
+		RoleName:  aws.String(RoleName),
+	})
+
+	fmt.Printf("Successfully attached policy to role: %v", res3)
 
 	// This is easier than putting into a function, as I had before!
 	pkg, err := ioutil.ReadFile(fileVar)

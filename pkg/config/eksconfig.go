@@ -66,7 +66,8 @@ func createConfigurationTemplate() *cldfmt.Template {
 			SubnetIds: []string{"subnet-123a"},
 		},
 		//Needs to be dynamically created as part of the stack to ensure this can be dynamically assigned
-		RoleArn: roleArn,
+		RoleArn:                    roleArn,
+		AWSCloudFormationDependsOn: []string{"eksClusterRole"},
 	}
 
 	var ref string
@@ -77,9 +78,10 @@ func createConfigurationTemplate() *cldfmt.Template {
 	}
 
 	template.Resources["ExampleNodeGroup"] = &eks.Nodegroup{
-		AmiType:       "ubuntu",
-		ClusterName:   cloudformation.GetAtt(ref, "Name"),
-		InstanceTypes: []string{"t3.large"},
+		AmiType:                    "ubuntu",
+		AWSCloudFormationDependsOn: []string{resource},
+		ClusterName:                cloudformation.GetAtt(ref, "Name"),
+		InstanceTypes:              []string{"t3.large"},
 	}
 
 	return template
