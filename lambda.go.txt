@@ -9,7 +9,7 @@ import (
 	"errors"
 	"log"
 
-	eksconfig "github.com/VariableExp0rt/lambda-and-fun/pkg/config"
+	"github.com/VariableExp0rt/lambda-and-fun/pkg/config"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
@@ -48,7 +48,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	switch action.operation {
 	case "create":
-		template := eksconfig.CreateConfigurationTemplate()
+		template := config.CreateConfigurationTemplate()
 		stack, err := svc.CreateStack(&cldfmt.CreateStackInput{})
 		if err != nil {
 			log.Printf("Unable to create cluster %v: %v", stack, err)

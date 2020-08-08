@@ -109,7 +109,7 @@ func main() {
 		PolicyName:     aws.String("AWSLambdaCreateStackPolicy"),
 	})
 	if err != nil {
-		fmt.Errorf("Error creating new custom policy for %v: %v", res2, err)
+		fmt.Printf("Error creating new custom policy for %v: %v", res2, err)
 	}
 
 	if err := svc.WaitUntilPolicyExists(&iam.GetPolicyInput{

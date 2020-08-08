@@ -1,4 +1,4 @@
-package eksconfig
+package config
 
 import (
 	"fmt"
@@ -15,8 +15,7 @@ import (
 	"github.com/awslabs/goformation/v4/cloudformation/iam"
 )
 
-type Export struct {
-}
+// Template exports the functions
 
 var (
 	resource   = "ExampleCluster"
@@ -27,7 +26,7 @@ var (
 )
 
 //GetVPCInfo describe all available VPC's to our AWS account
-func (e *Export) GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
+func GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
 
 	svc := ec2.New(sess)
 
@@ -42,7 +41,7 @@ func (e *Export) GetVPCInfo() (*ec2.DescribeVpcsOutput, error) {
 }
 
 //CreateConfigurationTemplate crafts the CloudFormation teamplte to be executed by the Lambda function
-func (e *Export) CreateConfigurationTemplate() *cldfmt.Template {
+func CreateConfigurationTemplate() *cldfmt.Template {
 
 	template := cldfmt.NewTemplate()
 
