@@ -9,7 +9,8 @@ import (
 	"errors"
 	"log"
 
-	"github.com/VariableExp0rt/lambda-and-fun/pkg/config"
+	"lambda-and-fun/pkg/config"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
@@ -39,7 +40,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	var action Actions
 
 	json.Unmarshal([]byte(request.Body), &action)
-	log.Printf("Received request, processing action: %v", action.operation)
+	log.Printf("Received request, processing action: %v stack", action.operation)
 
 	//TODO: This needs to be swapped with cloudformation CreateStack using the code worked on
 	// for cloudformation/goformation
@@ -49,19 +50,27 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	switch action.operation {
 	case "create":
 		template := config.CreateConfigurationTemplate()
-		stack, err := svc.CreateStack(&cldfmt.CreateStackInput{})
+		stack, err := svc.CreateStack(&cldfmt.CreateStackInput{
+			Capabilities: aws.StringSlice([]string{"CAPABILITY_NAMED_IAM"}),
+		})
 		if err != nil {
 			log.Printf("Unable to create cluster %v: %v", stack, err)
 		}
+		var b []byte
+		template.Resources.UnmarshalJSON(b)
+		c := string(b)
+		return events.APIGatewayProxyResponse{Body: c}, err
 
 	case "delete":
 		template := config.CreateConfigurationTemplate()
-		stack, err := svc.DeleteStack(&cldfmt.DeleteStackInput{
-			TemplateBody: template,
-		})
+		stack, err := svc.DeleteStack(&cldfmt.DeleteStackInput{})
 		if err != nil {
 			log.Printf("Unable to delete stack %v: %v", stack, err)
 		}
+		var b []byte
+		template.Resources.UnmarshalJSON(b)
+		c := string(b)
+		return events.APIGatewayProxyResponse{Body: c}, err
 	}
 
 	return events.APIGatewayProxyResponse{StatusCode: 200}, ErrNon200Response
