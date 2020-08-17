@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"math/rand"
 	"os"
 	"time"
 
@@ -17,14 +17,13 @@ import (
 
 var (
 	fileVar string
-	region  = &rPtr
-	rPtr    = "eu-west-2"
+	// TODO: Could have the below region as an argument or flag really
+	region  = func(s string) *string { return &s }("eu-west-2")
 	account *string
 )
 
 func main() {
 	// arguments to be passed to the commandline when invoking the program
-	// TODO
 	var RoleName string
 
 	flag.StringVar(&fileVar, "file-path", "", "Path to deployment package (zip file)")
@@ -44,8 +43,8 @@ func main() {
 	}
 
 	//TODO: Change this, add a CLI flag and if not null string, execute the create role, otherwise, add flag for attach role
-	if RoleName == "" {
-		RoleName = "default-role" + time.Now().UTC().Format(time.UnixDate)
+	if len(RoleName) == 0 {
+		RoleName = "default-role" + string(rand.Int())
 	}
 	// Every interaction with the AWS SDK requires a session, this just establishes a basic session
 	// to be able to pass to the services we want to interact with
@@ -69,7 +68,7 @@ func main() {
 	//TODO: switch statement using above skip role creation var as case
 	resp, err := svc.CreateRole(params)
 	if err != nil {
-		log.Printf("Error creating role: %v", err)
+		fmt.Println(err.Error(), resp)
 	}
 
 	//Wait until the Role exists before attaching new policies, which would otherwise fail
@@ -81,54 +80,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	//attach additional policies which will allow Lambda to do extra things
+	//This is the primary policy we want the Lambda to be able to use when 'Assuming' the Role
 	res, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-		PolicyArn: aws.String("arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"),
+		PolicyArn: aws.String("arn:aws:iam::aws:policy/AdministratorAccess"),
 		RoleName:  aws.String(RoleName),
 	})
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println(err.Error(), res)
 	}
-
 	fmt.Println("Successfully attached policy to Role", res)
 
-	//This is the primary policy we want the Lambda to be able to use when 'Assuming' the Role
-
-	res1, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-		PolicyArn: aws.String("arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"),
-		RoleName:  aws.String(RoleName),
-	})
-	if err != nil {
-		log.Printf("Error attaching policy to role: %v\nResult: %v", err, res1)
-	}
+	time.Sleep(6 * time.Second)
 
 	//TODO: Create the policy document, then attach it to the Lambda role created above
-	res2, err := svc.CreatePolicy(&iam.CreatePolicyInput{
-		//TODO: Add policy document for CreateStack and DeleteStack actions for Cloudformation
-		PolicyDocument: aws.String("{\"Version\": \"2012-10-17\",\"Statement\": [{\"Sid\": \"VisualEditor0\",\"Effect\": \"Allow\",\"Action\": [\"cloudformation:CreateStack\",\"cloudformation:DeleteStack\"],\"Resource\": \"*\"}]}"),
-		PolicyName:     aws.String("AWSLambdaCreateStackPolicy"),
-	})
-	if err != nil {
-		fmt.Printf("Error creating new custom policy for %v: %v", res2, err)
-	}
-
-	if err := svc.WaitUntilPolicyExists(&iam.GetPolicyInput{
-		PolicyArn: res2.Policy.Arn,
-	}); err != nil {
-		fmt.Printf("Error waiting for policy to be created: %v", err)
-	}
-
-	res3, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-		PolicyArn: res2.Policy.Arn,
-		RoleName:  aws.String(RoleName),
-	})
-
-	fmt.Printf("Successfully attached policy to role: %v", res3)
 
 	// This is easier than putting into a function, as I had before!
 	pkg, err := ioutil.ReadFile(fileVar)
 	if err != nil {
-		log.Panicf("Will not create function, deployment package cannot be read: %v", err)
+		fmt.Println(err.Error(), "Unable to read deployment file:", fileVar)
+		return
 	}
 
 	lmdsvc := lambda.New(sess)
@@ -141,23 +111,27 @@ func main() {
 		Description:  aws.String("This function manages the creation and deletion of Amazon EKS Clusters"),
 		FunctionName: aws.String(FuncName),
 		Handler:      aws.String("main"),
-		Role:         aws.String(*resp.Role.Arn),
+		Role:         resp.Role.Arn,
 		Runtime:      aws.String("go1.x"),
 	}
 
 	//Create the function and wait until it exists before trying to create the API Gateway resource for it
 	resp2, err := lmdsvc.CreateFunction(funcParams)
 	if err != nil {
-		fmt.Printf("Error creating function: %v", err)
+		fmt.Println(err.Error(), resp2)
+		return
 	}
 
 	if err := lmdsvc.WaitUntilFunctionActive(&lambda.GetFunctionConfigurationInput{
 		FunctionName: aws.String(FuncName),
 	}); err != nil {
 		fmt.Println(err.Error(), resp2)
+		return
 	}
 
 	fmt.Println("Function was created successfully and is currently active: ", FuncName)
+
+	time.Sleep(6 * time.Second)
 
 	// A helper for referencing within the API Gateway PutIntegration below
 	function, err := lmdsvc.GetFunctionConfiguration(&lambda.GetFunctionConfigurationInput{FunctionName: aws.String(FuncName)})
@@ -170,8 +144,10 @@ func main() {
 		Name: aws.String("EKS-Setup"),
 	})
 	if err != nil {
-		log.Printf("Error creating REST API: %v", err)
+		fmt.Println(err.Error(), resp3)
 	}
+
+	time.Sleep(6 * time.Second)
 
 	//Grab the ID of the newly created REST API, this is needed below to find the root object id
 	api := resp3.Id
@@ -179,22 +155,52 @@ func main() {
 	//add logic to get the root path or parent ID
 	parentAPI, err := apigwsvc.GetResources(&apigateway.GetResourcesInput{RestApiId: api})
 	if err != nil {
-		log.Printf("Unable to get parent REST API ID: %v", err)
+		fmt.Println(err.Error(), parentAPI)
 	}
 
-	var parentId = parentAPI.Items[0].ParentId
+	var parentID = func(*apigateway.GetResourcesOutput) *string {
+		var s *string
+		for _, val := range parentAPI.Items {
+			s = val.Id
+			if aws.StringValue(val.Id) == "" {
+				os.Exit(1)
+			}
+		}
+		return s
+	}(parentAPI)
+
+	//var check = func(parentID *string) bool {
+	//	var ns string
+	//	ns = aws.StringValue(parentID)
+	//	var chk bool
+	//	if ns == "" {
+	//		chk = false
+	//	} else if ns != "" {
+	//		chk = true
+	//	}
+	//	return chk
+	//}(parentID)
+
+	//if check == false {
+	//	fmt.Println("Cannot get parent ID value")
+	//	os.Exit(1)
+	//}
+
+	time.Sleep(6 * time.Second)
 
 	//Create the Resource on top of the above REST API
 	resource, err := apigwsvc.CreateResource(&apigateway.CreateResourceInput{
 		RestApiId: api,
 		PathPart:  resp3.Name,
-		ParentId:  parentId,
+		ParentId:  parentID,
 	})
 	if err != nil {
-		fmt.Printf("Error assigning resource %v to API Gateway: %v", resource, resp3)
+		fmt.Println(err.Error(), resource, resp3)
 	}
 
-	resourceId := resource.Id
+	time.Sleep(6 * time.Second)
+
+	resourceID := resource.Id
 
 	//PutMethod so that we are able to sent POST requests to the API Gateway to trigger
 	//the Lambda function
@@ -202,24 +208,25 @@ func main() {
 		AuthorizationType: aws.String("None"),
 		HttpMethod:        aws.String("POST"),
 		RestApiId:         api,
-		ResourceId:        resourceId,
+		ResourceId:        resourceID,
 	})
 	if err != nil {
-		fmt.Printf("Unable to create put method %v for resource %v", method, resource)
+		fmt.Println(err.Error(), method, resource)
 	}
 
 	//Enable the integration responsible for allowing the API Gateway to forward requests/trigger
 	//the Lambda function
+	fmt.Println(aws.StringValue(function.FunctionArn))
 	integration, err := apigwsvc.PutIntegration(&apigateway.PutIntegrationInput{
 		HttpMethod:            aws.String("POST"),
 		IntegrationHttpMethod: aws.String("POST"),
 		RestApiId:             api,
-		ResourceId:            resourceId,
+		ResourceId:            resourceID,
 		Type:                  aws.String("AWS"),
-		Uri:                   aws.String(*function.FunctionArn),
+		Uri:                   aws.String("arn:aws:apigateway:" + aws.StringValue(region) + ":lambda:path/2015-03-31/functions/" + aws.StringValue(function.FunctionArn) + "/invocations"),
 	})
 	if err != nil {
-		fmt.Printf("Unable to associate method with function for %v: %v", integration, err)
+		fmt.Println(err.Error(), integration, err)
 	}
 
 	//There is absolutely, surely, an easier way to get a pointer to a string than doing this
@@ -232,12 +239,12 @@ func main() {
 	methodResp, err := apigwsvc.PutMethodResponse(&apigateway.PutMethodResponseInput{
 		HttpMethod:     aws.String("POST"),
 		RestApiId:      api,
-		ResourceId:     resourceId,
+		ResourceId:     resourceID,
 		ResponseModels: respModel,
 		StatusCode:     aws.String("200"),
 	})
 	if err != nil {
-		fmt.Printf("Error putting method response %v", methodResp)
+		fmt.Println(err.Error(), methodResp)
 	}
 
 	str = ""
@@ -246,7 +253,7 @@ func main() {
 	intResp, err := apigwsvc.PutIntegrationResponse(&apigateway.PutIntegrationResponseInput{
 		HttpMethod:        aws.String("POST"),
 		RestApiId:         api,
-		ResourceId:        resourceId,
+		ResourceId:        resourceID,
 		ResponseTemplates: respModel,
 		StatusCode:        aws.String("200"),
 	})
@@ -259,49 +266,58 @@ func main() {
 		StageName: aws.String("prod"),
 	})
 	if err != nil {
-		fmt.Printf("Error deploying newly created API %v: %v", deploy, err)
+		fmt.Println(err.Error(), deploy, err)
 	}
+
+	time.Sleep(6 * time.Second)
 
 	// Could really do with wrapping this into a variadic function because it looks untidy
 	var (
-		REGION     = *region + ":"
-		ACCOUNT    = *account + ":"
-		API        = *api
 		pathPrefix = "arn:aws:execute-api:"
 		pathSuffix = "/*/POST/EKS-Setup"
 	)
 
-	sArn := pathPrefix + REGION + ACCOUNT + API + pathSuffix
+	//Anonymous helper function to concat strings that are a string pointer
+	//var srcArn = func(strings ...*string) string {
+	//	var s string
+	//	for _, str := range strings {
+	//		s = s + aws.StringValue(str)
+	//		return s
+	//	}
+	//	return s
+	//}()
 
 	perms, err := lmdsvc.AddPermission(&lambda.AddPermissionInput{
 		FunctionName: &FuncName,
 		StatementId:  aws.String("apigateway-test-2"),
 		Action:       aws.String("lambda:InvokeFunction"),
-		SourceArn:    aws.String(sArn),
+		Principal:    aws.String("apigateway.amazonaws.com"),
+		SourceArn:    aws.String(pathPrefix + aws.StringValue(region) + ":" + aws.StringValue(account) + ":" + aws.StringValue(api) + pathSuffix),
 	})
 	if err != nil {
-		fmt.Printf("Error adding permission to API Gateway %v: %v", perms.Statement, err)
+		fmt.Println(err.Error(), perms.Statement)
 	}
 
 	perms1, err := lmdsvc.AddPermission(&lambda.AddPermissionInput{
 		FunctionName: &FuncName,
 		StatementId:  aws.String("apigateway-prod-2"),
 		Action:       aws.String("lambda:InvokeFunction"),
-		SourceArn:    aws.String(sArn),
+		Principal:    aws.String("apigateway.amazonaws.com"),
+		SourceArn:    aws.String(pathPrefix + aws.StringValue(region) + ":" + aws.StringValue(account) + ":" + aws.StringValue(api) + pathSuffix),
 	})
 	if err != nil {
-		fmt.Printf("Error adding permission to API Gateway %v: %v", perms1.Statement, err)
+		fmt.Println(err.Error(), perms1.Statement)
 	}
 
 	testResult, err := apigwsvc.TestInvokeMethod(&apigateway.TestInvokeMethodInput{
 		Body:                aws.String(`{"operation": "create"}`),
 		HttpMethod:          aws.String("POST"),
 		PathWithQueryString: aws.String(""),
-		ResourceId:          resourceId,
+		ResourceId:          resourceID,
 		RestApiId:           api,
 	})
 	if err != nil || testResult.Status != aws.Int64(200) {
-		fmt.Printf("Error invoking test of method on API Gateway: %v", err)
+		fmt.Println(err.Error(), testResult.Status)
 	}
 
 	fmt.Println("Successfully deployed API Gateway and tested with the following status code: ", testResult.Status)

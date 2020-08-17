@@ -1,6 +1,5 @@
-github.com/VariableExp0rt/lambda-and-fun v0.0.0-20200808130434-4c777b03720e h1:4k3qJKkjemERvpbDljNGNFVHW9hK0CQsvXCX1ZdI8Ro=
-github.com/aws/aws-sdk-go v1.33.20 h1:mtXKHmMQO6o0i2GTjyiVNZGlXqJDCUbiik0OQeMds/o=
-github.com/aws/aws-sdk-go v1.33.20/go.mod h1:5zCpMtNQVjRREroY7sYe8lOMRSxkhG6MZveU8YkpAk0=
+github.com/aws/aws-sdk-go v1.34.0 h1:brux2dRrlwCF5JhTL7MUT3WUwo9zfDHZZp3+g3Mvlmo=
+github.com/aws/aws-sdk-go v1.34.0/go.mod h1:5zCpMtNQVjRREroY7sYe8lOMRSxkhG6MZveU8YkpAk0=
 github.com/awslabs/goformation v1.4.1 h1:jws9kTrcI53Hq2COJAy50uAhgxB5N/Enb9Gmclr/MP4=
 github.com/awslabs/goformation v1.4.1/go.mod h1:HezUyH08DSwwGn3GioVXWZYUhkdvC+oGJ7ya7vBRm7k=
 github.com/awslabs/goformation/v4 v4.14.0 h1:E2Pet9eIqA4qzt3dzzzE4YN83V4Kyfbcio0VokBC9TA=
