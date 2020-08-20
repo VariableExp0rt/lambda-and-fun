@@ -8,23 +8,44 @@ import (
 	"os"
 	"time"
 
+	// TODO: Uncomment this
+	//"github.com/VariableExp0rt/lambda-and-fun/config/helper"
+	"github.com/VariableExp0rt/lambda-and-fun/config/session"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
+	awssess "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/apigateway"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
 var (
+
+	//role = helper.Role{} defined this so we can store command line args in the structs
+	//lambda = helper.Lambda{}
+	//gateway = helper.Gateway{}
 	fileVar string
 	// TODO: Could have the below region as an argument or flag really
 	region  = func(s string) *string { return &s }("eu-west-2")
 	account *string
+	sess    *awssess.Session
 )
 
+// Init the session and parse the commandline flag for the region
+func init() {
+	sess = session.NewSession("")
+}
+
+// TODO: REWRITE THIS SECTION TO ONLY INCLUDE NESTED SWITCH STATEMENTS
+// CASE "CREATE", NESTED SWITCH FOR SUBRESOURCES (LAMBDA, ROLES, GATEWAY) OR ALL
+// CASE "DELETE", NESTED SWITCH FOR SUBRESOURCES (LAMBDA, ROLES, GATEWAY) OR ALL
+// This will be used to handle command line subcommands
 func main() {
 	// arguments to be passed to the commandline when invoking the program
 	var RoleName string
+
+	// TODO: Change flags to be stored in the struct from the helper package (Role, Lambda, Gateway)
+	//so that we can run the commands and not get errors :)
+	//flag.StringVar(&roleTest.RoleName, name string, value string, usage string)
 
 	flag.StringVar(&fileVar, "file-path", "", "Path to deployment package (zip file)")
 	flag.StringVar(&RoleName, "role-name", "", "Name of the new role to create")
@@ -42,14 +63,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	var seededRand *rand.Rand = rand.New(
+		rand.NewSource(time.Now().UnixNano()))
+
+	var r = func(length int, chars string) string {
+		b := make([]byte, length)
+		for i := range b {
+			b[i] = chars[seededRand.Intn(len(chars))]
+		}
+		return string(b)
+	}
+
 	//TODO: Change this, add a CLI flag and if not null string, execute the create role, otherwise, add flag for attach role
 	if len(RoleName) == 0 {
-		RoleName = "default-role" + string(rand.Int())
+		RoleName = "default-role" + r(6, "abcdefghi"+"123456789")
 	}
-	// Every interaction with the AWS SDK requires a session, this just establishes a basic session
-	// to be able to pass to the services we want to interact with
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable, Config: aws.Config{Region: aws.String("eu-west-2")}}))
 
 	// Initialise the service we'd like to work with
 	svc := iam.New(sess)
