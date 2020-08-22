@@ -2,6 +2,8 @@ package helper
 
 import (
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -18,16 +20,7 @@ const (
 	policyArnPrefixServiceRole = "arn:aws:iam::aws:policy/service-role/"
 )
 
-type RequiredArgs struct {
-	Account      string
-	FunctionName string
-	GatewayName  string
-	Operation    string
-	Region       string
-	RoleName     string
-	RoleService  string
-	Zipfile      []byte
-}
+// TODO: Add WaitUntil functions to each of those below so we know when the service is actually up, or timeout
 
 // Role is a data structure to hold the number of roles the function should create, the names it should use
 // to do so, and a
@@ -37,11 +30,19 @@ type Role struct {
 	Service     string
 }
 
+// AttachPolicyInput holds the data for the AttachPolicy function
+type AttachPolicyInput struct {
+	Policy   string
+	RoleName string
+	Role     *iam.Role
+	Sess     *session.Session
+}
+
 // Lambda provides the necessary required fields to create a minimal Lambda function for our purposes, creates a
 // service instance using the session created in session.go and then our input as the CreateFunctionInput arguments
 // , it returns a *lambda.Function
 type Lambda struct {
-	Code         []byte
+	Code         string
 	Description  string
 	FunctionName string
 	Handler      string
@@ -58,9 +59,17 @@ type Gateway struct {
 	Description string
 }
 
-//func SetArgs() {
-//
-//}
+var seededRand *rand.Rand = rand.New(
+	rand.NewSource(time.Now().UnixNano()))
+
+// R generates a random number from the given chars
+var R = func(length int, chars string) string {
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = chars[seededRand.Intn(len(chars))]
+	}
+	return string(b)
+}
 
 // CreateRole creates a given number of IAM roles with the required parameters only as input to the function
 // Singular would be easy to express, multiple roles can be created by running this function multiple times
@@ -112,8 +121,13 @@ func AttachPolicy(policy string, roleName string, r *Role, sess *session.Session
 func CreateLambda(l Lambda, sess *session.Session) (*lambda.FunctionConfiguration, error) {
 	svc := lambda.New(sess)
 
+	pkg, err := ioutil.ReadFile(l.Code)
+	if err != nil {
+		fmt.Println(err.Error(), l.Code)
+	}
+
 	res, err := svc.CreateFunction(&lambda.CreateFunctionInput{
-		Code:         &lambda.FunctionCode{ZipFile: l.Code},
+		Code:         &lambda.FunctionCode{ZipFile: pkg},
 		Description:  aws.String(l.Description),
 		FunctionName: aws.String(l.FunctionName),
 		Handler:      aws.String(l.Handler),
@@ -220,7 +234,7 @@ func GetAPIParentID(apiID *string, sess *session.Session) *string {
 }
 
 // ConfigureAPIEndpoint conducts the necessary steps to make the API reachable
-func ConfigureAPIEndpoint()
+func ConfigureAPIEndpoint(rootID *string, sess *session.Session)
 
 // CreateAllResources is used to make all of the above resources, similarly to a stack, rather than having to
 // have a switch statement to trigger each, more logic to be added in the lmabda itself for this
