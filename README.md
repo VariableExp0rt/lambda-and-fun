@@ -29,15 +29,14 @@ Improve error handling and separate each creation of a resource into it's own fu
 
 Reference when going through setting up a Cluster via Lambda;
 
-[ ] eksctl.io
-
-[ ] [AWS EKS User Guide](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html)
+- [x] eksctl.io
+- [x] [AWS EKS User Guide](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html)
 
 The idea is to have the cluster configuration in a separate package, and import into the Lambda to be used with 'CreateCluster'
 
 ##### TODO
 
-[ ] Write tests
-[ ] Improve error handling
-[ ] Refactor huge configuration function
-[ ] Create TestMethod subcommand
+- [ ] Write tests
+- [ ] Improve error handling
+- [ ] Refactor huge configuration function
+- [ ] Create TestMethod subcommand
