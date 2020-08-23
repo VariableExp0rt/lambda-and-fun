@@ -54,9 +54,10 @@ type Lambda struct {
 // it uses the session to create a service and then invoke the creation with the parameters supplied by this
 // data structure
 type Gateway struct {
-	Name        string
-	Type        string
-	Description string
+	Name         string
+	Type         string
+	Description  string
+	FunctionName string
 }
 
 var seededRand *rand.Rand = rand.New(
@@ -240,7 +241,7 @@ func GetAPIParentID(apiID *string, sess *session.Session) *string {
 }
 
 // ConfigureAPIEndpoint conducts the necessary steps to make the API reachable
-func ConfigureAPIEndpoint(rootID *string, api *string, name *string, sess *session.Session) {
+func ConfigureAPIEndpoint(rootID *string, api *string, name *string, funcName string, sess *session.Session) {
 	svc := apigateway.New(sess)
 
 	res, err := svc.CreateResource(&apigateway.CreateResourceInput{
@@ -269,8 +270,7 @@ func ConfigureAPIEndpoint(rootID *string, api *string, name *string, sess *sessi
 		fmt.Println("Adding method: ", mth)
 	}
 
-	var l Lambda
-	functionArn, err := GetLambdaFunctionArn(l.FunctionName, sess)
+	functionArn, err := GetLambdaFunctionArn(funcName, sess)
 
 	intg, err := svc.PutIntegration(&apigateway.PutIntegrationInput{
 		ResourceId:            resID,
@@ -284,6 +284,63 @@ func ConfigureAPIEndpoint(rootID *string, api *string, name *string, sess *sessi
 		fmt.Println(err.Error())
 	} else {
 		fmt.Println("Adding integration: ", intg)
+	}
+
+	var str = "Empty"
+
+	respModel := make(map[string]*string, 1)
+	respModel["application/json"] = &str
+
+	mthRes, err := svc.PutMethodResponse(&apigateway.PutMethodResponseInput{
+		HttpMethod:     aws.String("POST"),
+		RestApiId:      api,
+		ResourceId:     resID,
+		ResponseModels: respModel,
+		StatusCode:     aws.String("200"),
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Adding method response: ", mthRes)
+	}
+
+	str = ""
+	respModel["application/json"] = &str
+
+	intRes, err := svc.PutIntegrationResponse(&apigateway.PutIntegrationResponseInput{
+		HttpMethod:        aws.String("POST"),
+		RestApiId:         api,
+		ResourceId:        resID,
+		ResponseTemplates: respModel,
+		StatusCode:        aws.String("200"),
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Adding integration response: ", intRes)
+	}
+
+	dep, err := svc.CreateDeployment(&apigateway.CreateDeploymentInput{
+		RestApiId: resID,
+		StageName: aws.String("prod"),
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Creating deployment for API Gateway: ", dep)
+	}
+
+	time.Sleep(6 * time.Second)
+
+	var (
+		pathPrefix = "arn:aws:execute-api:"
+		pathSuffix = "/*/POST/" + aws.StringValue(res.PathPart)
+		SourceArn  = aws.String(pathPrefix + aws.StringValue(sess.Config.Region) + ":" + os.Getenv("account") + ":" + aws.StringValue(resID) + pathSuffix)
+	)
+
+	err = AddLambdaPermissions(funcName, SourceArn, sess)
+	if err != nil {
+		fmt.Println(err.Error())
 	}
 }
 
@@ -300,6 +357,40 @@ func GetLambdaFunctionArn(funcName string, sess *session.Session) (*string, erro
 	return function.FunctionArn, err
 }
 
+// AddLambdaPermissions allows us to add permissions to invoke the function through the Gateway
+// this was a bit 'hacky' but I couldn't find any other way to do it.
+func AddLambdaPermissions(funcName string, path *string, sess *session.Session) error {
+	svc := lambda.New(sess)
+
+	perms, err := svc.AddPermission(&lambda.AddPermissionInput{
+		FunctionName: aws.String(funcName),
+		StatementId:  aws.String("apigateway-test-2"),
+		Action:       aws.String("lambda:InvokeFunction"),
+		Principal:    aws.String("apigateway.amazonaws.com"),
+		SourceArn:    path,
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Adding permissions to Lambda: ", perms)
+	}
+
+	perms1, err := svc.AddPermission(&lambda.AddPermissionInput{
+		FunctionName: aws.String(funcName),
+		StatementId:  aws.String("apigateway-prod-2"),
+		Action:       aws.String("lambda:InvokeFunction"),
+		Principal:    aws.String("apigateway.amazonaws.com"),
+		SourceArn:    path,
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Adding permissions to Lambda: ", perms1)
+	}
+
+	return err
+}
+
 // CreateAllResources is used to make all of the above resources, similarly to a stack, rather than having to
 // have a switch statement to trigger each, more logic to be added in the lmabda itself for this
 func CreateAllResources() {
@@ -308,5 +399,10 @@ func CreateAllResources() {
 
 // DeleteAllResources is the same as the above, but a teardown instead of setting up
 func DeleteAllResources() {
+
+}
+
+// TestAPI is used to test the setup of the resources
+func TestAPI() {
 
 }

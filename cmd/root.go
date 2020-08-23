@@ -31,9 +31,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "service-up",
-	Short: "Service Up is a program to configure a number of AWS Services",
-	Long: `Service Up is a binary which allows you to build a very quick
+	Use:   "my-app",
+	Short: "My App is a program to configure a number of AWS Services",
+	Long: `My App is a binary which allows you to build a very quick
 				Lambda-Over-HTTPS function to be able to trigger CloudFormation templates with
 				as simple cURL command.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -74,7 +74,9 @@ func init() {
 
 	cmdCreateGateway.Flags().StringVar(&GatewayArgs.Name, "name", "default-gateway"+helper.R(6, "abcdefghi"+"123456789"), "Name of API Gateway")
 	cmdCreateGateway.Flags().StringVar(&GatewayArgs.Description, "desc", "", "A description for the API Gateway")
+	cmdCreateGateway.Flags().StringVar(&GatewayArgs.FunctionName, "func-name", LambdaArgs.FunctionName, "Supply function name to allow invocation")
 	cmdCreateGateway.MarkFlagRequired("name")
+	cmdCreateGateway.MarkFlagRequired("func-name")
 
 	cmdDeleteRole.Flags().StringVar(&RoleArgs.RoleName, "name", "", "The name of the Role to be deleted")
 	cmdDeleteLambda.Flags().StringVar(&LambdaArgs.FunctionName, "name", "", "The name of the Function to be deleted")

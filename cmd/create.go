@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/VariableExp0rt/lambda-and-fun/config/helper"
 	"github.com/spf13/cobra"
@@ -19,9 +20,11 @@ var cmdCreate = &cobra.Command{
 	Use:   "create [resource to setup]",
 	Short: "Create tells the program to create a resource",
 	Long:  "Use this flag to signal the program to create the requested resource, which is specified in a subcommand",
-	Args:  cobra.NoArgs,
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Attempting to create requested resources")
+		if len(os.Args) == 0 {
+			fmt.Println("Supply at least one subcommand to create a resource")
+		}
 	},
 }
 
@@ -86,6 +89,6 @@ var cmdCreateGateway = &cobra.Command{
 		} else {
 			fmt.Println("API Gateway created: ", gwy)
 		}
-		helper.ConfigureAPIEndpoint(id, gwy.Id, gwy.Name, sess)
+		helper.ConfigureAPIEndpoint(id, gwy.Id, gwy.Name, LambdaArgs.FunctionName, sess)
 	},
 }
