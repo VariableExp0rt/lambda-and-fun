@@ -2,35 +2,16 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
 	"time"
 
 	"github.com/VariableExp0rt/lambda-and-fun/cmd"
-	"github.com/VariableExp0rt/lambda-and-fun/config/session"
 	"github.com/aws/aws-sdk-go/aws"
-	awssess "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/apigateway"
-	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/lambda"
+	//"github.com/aws/aws-sdk-go/aws"
+	//"github.com/aws/aws-sdk-go/service/apigateway"
+	//"github.com/aws/aws-sdk-go/service/lambda"
 )
-
-var (
-
-	//role = helper.Role{} defined this so we can store command line args in the structs
-	//lambda = helper.Lambda{}
-	//gateway = helper.Gateway{}
-	fileVar string
-	// TODO: Could have the below region as an argument or flag really
-	region  = func(s string) *string { return &s }("eu-west-2")
-	account *string
-	sess    *awssess.Session
-)
-
-// Init the session and parse the commandline flag for the region
-func init() {
-	sess = session.NewSession("")
-}
 
 // TODO: REWRITE THIS SECTION TO ONLY INCLUDE NESTED SWITCH STATEMENTS
 // CASE "CREATE", NESTED SWITCH FOR SUBRESOURCES (LAMBDA, ROLES, GATEWAY) OR ALL
@@ -39,152 +20,6 @@ func init() {
 func main() {
 	cmd.Execute()
 
-	//Add this to remove some of the globally declared variables
-	if envVar, res := os.LookupEnv("ACCOUNT"); res != false {
-		account = &envVar
-	} else if res == false {
-		fmt.Println("must set account ID environment variable before proceeding")
-		os.Exit(1)
-	}
-
-	// Initialise the service we'd like to work with
-	svc := iam.New(sess)
-
-	//Create the config to be used below to CreateRole
-	params := &iam.CreateRoleInput{
-		AssumeRolePolicyDocument: aws.String("{\"Version\": \"2012-10-17\",\"Statement\": [{\"Effect\": \"Allow\",\"Principal\": {\"Service\": \"lambda.amazonaws.com\"},\"Action\": \"sts:AssumeRole\"}]}"),
-		Description:              aws.String("A Role to allow Lambda to perform it's basic functions and interact with CloudFormation"),
-		RoleName:                 aws.String(RoleName),
-	}
-
-	//CreateRole will create a new managed IAM Role, and can only have one managed policy attached to
-	//it in the above configuration. Multiple can be assigned by calling AttachRolePolicy as many
-	//times as needed
-
-	//TODO: switch statement using above skip role creation var as case
-	resp, err := svc.CreateRole(params)
-	if err != nil {
-		fmt.Println(err.Error(), resp)
-	}
-
-	//Wait until the Role exists before attaching new policies, which would otherwise fail
-	svc.WaitUntilRoleExists(&iam.GetRoleInput{
-		RoleName: aws.String(RoleName),
-	})
-	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
-	}
-
-	//This is the primary policy we want the Lambda to be able to use when 'Assuming' the Role
-	res, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-		PolicyArn: aws.String("arn:aws:iam::aws:policy/AdministratorAccess"),
-		RoleName:  aws.String(RoleName),
-	})
-	if err != nil {
-		fmt.Println(err.Error(), res)
-	}
-	fmt.Println("Successfully attached policy to Role", res)
-
-	time.Sleep(6 * time.Second)
-
-	//TODO: Create the policy document, then attach it to the Lambda role created above
-
-	// This is easier than putting into a function, as I had before!
-	pkg, err := ioutil.ReadFile(fileVar)
-	if err != nil {
-		fmt.Println(err.Error(), "Unable to read deployment file:", fileVar)
-		return
-	}
-
-	lmdsvc := lambda.New(sess)
-
-	var FuncName = "my-example-function"
-
-	//Generate the Function Input
-	funcParams := &lambda.CreateFunctionInput{
-		Code:         &lambda.FunctionCode{ZipFile: pkg},
-		Description:  aws.String("This function manages the creation and deletion of Amazon EKS Clusters"),
-		FunctionName: aws.String(FuncName),
-		Handler:      aws.String("main"),
-		Role:         resp.Role.Arn,
-		Runtime:      aws.String("go1.x"),
-	}
-
-	//Create the function and wait until it exists before trying to create the API Gateway resource for it
-	resp2, err := lmdsvc.CreateFunction(funcParams)
-	if err != nil {
-		fmt.Println(err.Error(), resp2)
-		return
-	}
-
-	if err := lmdsvc.WaitUntilFunctionActive(&lambda.GetFunctionConfigurationInput{
-		FunctionName: aws.String(FuncName),
-	}); err != nil {
-		fmt.Println(err.Error(), resp2)
-		return
-	}
-
-	fmt.Println("Function was created successfully and is currently active: ", FuncName)
-
-	time.Sleep(6 * time.Second)
-
-	// A helper for referencing within the API Gateway PutIntegration below
-	function, err := lmdsvc.GetFunctionConfiguration(&lambda.GetFunctionConfigurationInput{FunctionName: aws.String(FuncName)})
-
-	//Initialise another service for the API Gateway
-	apigwsvc := apigateway.New(sess)
-
-	//Create the REST API named EKS-Setup
-	resp3, err := apigwsvc.CreateRestApi(&apigateway.CreateRestApiInput{
-		Name: aws.String("EKS-Setup"),
-	})
-	if err != nil {
-		fmt.Println(err.Error(), resp3)
-	}
-
-	time.Sleep(6 * time.Second)
-
-	//Grab the ID of the newly created REST API, this is needed below to find the root object id
-	api := resp3.Id
-
-	//add logic to get the root path or parent ID
-	parentAPI, err := apigwsvc.GetResources(&apigateway.GetResourcesInput{RestApiId: api})
-	if err != nil {
-		fmt.Println(err.Error(), parentAPI)
-	}
-
-	var parentID = func(*apigateway.GetResourcesOutput) *string {
-		var s *string
-		for _, val := range parentAPI.Items {
-			s = val.Id
-			if aws.StringValue(val.Id) == "" {
-				os.Exit(1)
-			}
-		}
-		return s
-	}(parentAPI)
-
-	//var check = func(parentID *string) bool {
-	//	var ns string
-	//	ns = aws.StringValue(parentID)
-	//	var chk bool
-	//	if ns == "" {
-	//		chk = false
-	//	} else if ns != "" {
-	//		chk = true
-	//	}
-	//	return chk
-	//}(parentID)
-
-	//if check == false {
-	//	fmt.Println("Cannot get parent ID value")
-	//	os.Exit(1)
-	//}
-
-	time.Sleep(6 * time.Second)
-
-	//Create the Resource on top of the above REST API
 	resource, err := apigwsvc.CreateResource(&apigateway.CreateResourceInput{
 		RestApiId: api,
 		PathPart:  resp3.Name,

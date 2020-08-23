@@ -82,6 +82,7 @@ func CreateRole(args Role, sess *session.Session) (*iam.Role, error) {
 		AssumeRolePolicyDocument: aws.String("{\"Version\": \"2012-10-17\",\"Statement\": [{\"Effect\": \"Allow\",\"Principal\": {\"Service\": \"" + args.Service + "\"},\"Action\": \"sts:AssumeRole\"}]}"),
 		Description:              aws.String(args.Description),
 	})
+	time.Sleep(6 * time.Second)
 	return role.Role, err
 }
 
@@ -113,6 +114,7 @@ func AttachPolicy(policy string, roleName string, r *Role, sess *session.Session
 			fmt.Println(err.Error())
 		}
 	}
+	time.Sleep(6 * time.Second)
 	return res, err
 }
 
@@ -137,6 +139,7 @@ func CreateLambda(l Lambda, sess *session.Session) (*lambda.FunctionConfiguratio
 	if err != nil {
 		fmt.Printf(err.Error())
 	}
+	time.Sleep(6 * time.Second)
 	return res, err
 }
 
@@ -169,7 +172,7 @@ func DeleteRole(roleName string, sess *session.Session) (*iam.DeleteRoleOutput, 
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-
+	time.Sleep(6 * time.Second)
 	return res, err
 }
 
@@ -184,6 +187,7 @@ func DeleteAttachedPolicy(policy string, roleName string, sess *session.Session)
 	if err != nil {
 		fmt.Printf(err.Error())
 	}
+	time.Sleep(6 * time.Second)
 	return res, err
 }
 
@@ -197,6 +201,7 @@ func DeleteLambda(funcName string, sess *session.Session) (*lambda.DeleteFunctio
 	if err != nil {
 		fmt.Printf(err.Error())
 	}
+	time.Sleep(6 * time.Second)
 	return res, err
 }
 
@@ -210,6 +215,7 @@ func DeleteRestAPI(name string, sess *session.Session) (*apigateway.DeleteRestAp
 	if err != nil {
 		fmt.Printf(err.Error())
 	}
+	time.Sleep(6 * time.Second)
 	return res, err
 }
 
@@ -234,11 +240,73 @@ func GetAPIParentID(apiID *string, sess *session.Session) *string {
 }
 
 // ConfigureAPIEndpoint conducts the necessary steps to make the API reachable
-func ConfigureAPIEndpoint(rootID *string, sess *session.Session)
+func ConfigureAPIEndpoint(rootID *string, api *string, name *string, sess *session.Session) {
+	svc := apigateway.New(sess)
+
+	res, err := svc.CreateResource(&apigateway.CreateResourceInput{
+		RestApiId: api,
+		ParentId:  rootID,
+		PathPart:  name,
+	})
+	if err != nil {
+		fmt.Printf(err.Error())
+	} else {
+		fmt.Println("Adding resource: ", res)
+	}
+	time.Sleep(6 * time.Second)
+
+	resID := res.Id
+
+	mth, err := svc.PutMethod(&apigateway.PutMethodInput{
+		AuthorizationType: aws.String("None"),
+		HttpMethod:        aws.String("POST"),
+		RestApiId:         api,
+		ResourceId:        resID,
+	})
+	if err != nil {
+		fmt.Printf(err.Error())
+	} else {
+		fmt.Println("Adding method: ", mth)
+	}
+
+	var l Lambda
+	functionArn, err := GetLambdaFunctionArn(l.FunctionName, sess)
+
+	intg, err := svc.PutIntegration(&apigateway.PutIntegrationInput{
+		ResourceId:            resID,
+		RestApiId:             api,
+		HttpMethod:            aws.String("POST"),
+		IntegrationHttpMethod: aws.String("POST"),
+		Type:                  aws.String("AWS"),
+		Uri:                   aws.String("arn:aws:apigateway:" + aws.StringValue(sess.Config.Region) + ":lambda:path/2015-03-31/functions/" + aws.StringValue(functionArn) + "/invocations"),
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("Adding integration: ", intg)
+	}
+}
+
+// GetLambdaFunctionArn is a way to retrieve the Lambda ARN
+func GetLambdaFunctionArn(funcName string, sess *session.Session) (*string, error) {
+	svc := lambda.New(sess)
+
+	function, err := svc.GetFunctionConfiguration(&lambda.GetFunctionConfigurationInput{
+		FunctionName: aws.String(funcName),
+	})
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	return function.FunctionArn, err
+}
 
 // CreateAllResources is used to make all of the above resources, similarly to a stack, rather than having to
 // have a switch statement to trigger each, more logic to be added in the lmabda itself for this
-func CreateAllResources()
+func CreateAllResources() {
+
+}
 
 // DeleteAllResources is the same as the above, but a teardown instead of setting up
-func DeleteAllResources()
+func DeleteAllResources() {
+
+}

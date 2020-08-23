@@ -4,17 +4,13 @@ import (
 	"fmt"
 
 	"github.com/VariableExp0rt/lambda-and-fun/config/helper"
-	"github.com/VariableExp0rt/lambda-and-fun/config/session"
-	awssess "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/spf13/cobra"
 )
 
-var sess *awssess.Session
-
 func init() {
-	sess = session.NewSession(region)
 	rootCmd.AddCommand(cmdCreate)
 	cmdCreate.AddCommand(cmdCreateRole)
+	cmdCreate.AddCommand(cmdAttachPolicy)
 	cmdCreate.AddCommand(cmdCreateLambda)
 	cmdCreate.AddCommand(cmdCreateGateway)
 }
@@ -35,7 +31,7 @@ var cmdCreateRole = &cobra.Command{
 	Long:  "This command creates an AWS IAM Role, which can be used to attach policies and for deploying other services",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		role, err := helper.CreateRole(roleArgs, sess)
+		role, err := helper.CreateRole(RoleArgs, sess)
 		if err != nil {
 			fmt.Printf(err.Error())
 		} else {
@@ -52,7 +48,7 @@ var cmdAttachPolicy = &cobra.Command{
 				to perform certain functions.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		res, err := helper.AttachPolicy(attachPolArgs.Policy, attachPolArgs.RoleName, &roleArgs, sess)
+		res, err := helper.AttachPolicy(AttachPolArgs.Policy, AttachPolArgs.RoleName, &RoleArgs, sess)
 		if err != nil {
 			fmt.Printf(err.Error())
 		} else {
@@ -68,7 +64,7 @@ var cmdCreateLambda = &cobra.Command{
 	with the given arguments which configures the function`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		lmb, err := helper.CreateLambda(lambdaArgs, sess)
+		lmb, err := helper.CreateLambda(LambdaArgs, sess)
 		if err != nil {
 			fmt.Printf(err.Error())
 		} else {
@@ -84,12 +80,12 @@ var cmdCreateGateway = &cobra.Command{
 	or to trigger our workloads through a Lambda, via HTTPS.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		gwy, id, err := helper.CreateGateway(gatewayArgs, sess)
+		gwy, id, err := helper.CreateGateway(GatewayArgs, sess)
 		if err != nil {
 			fmt.Printf(err.Error())
 		} else {
 			fmt.Println("API Gateway created: ", gwy)
 		}
-		helper.ConfigureAPIEndpoint(id, sess)
+		helper.ConfigureAPIEndpoint(id, gwy.Id, gwy.Name, sess)
 	},
 }
