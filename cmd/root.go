@@ -60,6 +60,12 @@ func init() {
 	cmdCreateRole.MarkFlagRequired("name")
 	cmdCreateRole.MarkFlagRequired("service")
 
+	cmdAttachPolicy.Flags().StringVar(&AttachPolArgs.Policy, "policy", "", "Supply the managed/unmanaged policy like 'AWSBasicLambdaExecutionRole'")
+	cmdAttachPolicy.Flags().StringVar(&AttachPolArgs.RoleName, "role", "", "Role name to attach policy to")
+	cmdAttachPolicy.Flags().StringVar(&AttachPolArgs.Service, "service", RoleArgs.Service, "The service the role was created for")
+	cmdAttachPolicy.MarkFlagRequired("policy")
+	cmdAttachPolicy.MarkFlagRequired("role")
+
 	cmdCreateLambda.Flags().StringVar(&LambdaArgs.Description, "desc", "", "Short description of function")
 	cmdCreateLambda.Flags().StringVar(&LambdaArgs.FunctionName, "name", "default-function"+helper.R(6, "abcdefghi"+"123456789"), "Name for function")
 	cmdCreateLambda.Flags().StringVar(&LambdaArgs.Handler, "handler", "main", "Entrypoint of function")

@@ -45,13 +45,13 @@ var cmdCreateRole = &cobra.Command{
 
 var cmdAttachPolicy = &cobra.Command{
 	Use:   "attach-policy",
-	Short: "Attach a IAM Policy to a Role",
+	Short: "Attach an IAM Policy to a Role",
 	Long: `This command allows users to attach either managed or self created policies
 				to an IAM role. This is useful for adding privileges to roles that need
 				to perform certain functions.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		res, err := helper.AttachPolicy(AttachPolArgs.Policy, AttachPolArgs.RoleName, &RoleArgs, sess)
+		res, err := helper.AttachPolicy(AttachPolArgs, sess)
 		if err != nil {
 			fmt.Printf(err.Error())
 		} else {
@@ -62,7 +62,7 @@ var cmdAttachPolicy = &cobra.Command{
 
 var cmdCreateLambda = &cobra.Command{
 	Use:   "lambda [args]",
-	Short: "Create a lambda function",
+	Short: "Create a Lambda function",
 	Long: `Supplying the lambda argument to the create command creates a new lambda function
 	with the given arguments which configures the function`,
 	Args: cobra.NoArgs,
@@ -78,7 +78,7 @@ var cmdCreateLambda = &cobra.Command{
 
 var cmdCreateGateway = &cobra.Command{
 	Use:   "gateway [args]",
-	Short: "An API Gateway resource",
+	Short: "Create an API Gateway resource",
 	Long: `This subcommand creates a new API Gateway service that will be used to expose other services
 	or to trigger our workloads through a Lambda, via HTTPS.`,
 	Args: cobra.NoArgs,

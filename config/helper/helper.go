@@ -34,8 +34,7 @@ type Role struct {
 type AttachPolicyInput struct {
 	Policy   string
 	RoleName string
-	Role     *iam.Role
-	Sess     *session.Session
+	Service  string
 }
 
 // Lambda provides the necessary required fields to create a minimal Lambda function for our purposes, creates a
@@ -89,7 +88,8 @@ func CreateRole(args Role, sess *session.Session) (*iam.Role, error) {
 
 // AttachPolicy is used to attach policies to roles that have previously been created
 // supply managed ARN of the policy e.g. AWSLambdaBasicExecutionRole or AWSEKSClusterPolicy
-func AttachPolicy(policy string, roleName string, r *Role, sess *session.Session) (*iam.AttachRolePolicyOutput, error) {
+// This function needs restructing, cannot pass r *Role as argument
+func AttachPolicy(ap AttachPolicyInput, sess *session.Session) (*iam.AttachRolePolicyOutput, error) {
 	svc := iam.New(sess)
 
 	var err error
@@ -97,19 +97,19 @@ func AttachPolicy(policy string, roleName string, r *Role, sess *session.Session
 
 	// If is managed policy specifically linked to a role which is linked to a specific service, this applies
 	// else use the normal policy prefix instead of a service-role prefix
-	var s = func(*Role) string { newStr := strings.Split(r.Service, "."); return newStr[0] }
-	if strings.Contains(policy, s(r)) {
+	var s = func(AttachPolicyInput) string { newStr := strings.Split(ap.Service, "."); return newStr[0] }
+	if strings.Contains(ap.Policy, s(ap)) {
 		res, err = svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-			PolicyArn: aws.String(policyArnPrefixServiceRole + policy),
-			RoleName:  aws.String(roleName),
+			PolicyArn: aws.String(policyArnPrefixServiceRole + ap.Policy),
+			RoleName:  aws.String(ap.RoleName),
 		})
 		if err != nil {
 			fmt.Println(err.Error())
 		}
 	} else {
 		res, err = svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-			PolicyArn: aws.String(policyArnPrefix + policy),
-			RoleName:  aws.String(roleName),
+			PolicyArn: aws.String(policyArnPrefix + ap.Policy),
+			RoleName:  aws.String(ap.RoleName),
 		})
 		if err != nil {
 			fmt.Println(err.Error())
